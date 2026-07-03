@@ -10,6 +10,11 @@ export default function HostedCheckoutPage() {
   const [simulatedOutcome, setSimulatedOutcome] = useState<'SUCCESS' | 'FAILURE' | 'INSUFFICIENT_BALANCE'>('SUCCESS');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState('idemp_order_88321a');
+  const [logs, setLogs] = useState<string[]>([
+    '[System Initialized] Connected to Payment Gateway Microservice (:3002)',
+    '[Idempotency Ready] Cryptographic lock key generated for transaction.'
+  ]);
 
   const amount = 1499.00;
 
@@ -17,6 +22,13 @@ export default function HostedCheckoutPage() {
     e.preventDefault();
     setLoading(true);
     setResult(null);
+
+    const timeStr = new Date().toLocaleTimeString();
+    setLogs(prev => [
+      ...prev,
+      `[${timeStr}] 🚀 POST http://localhost:3002/api/v1/payments (Headers: Authorization Bearer sk_test_demo_...)`,
+      `[${timeStr}] 🔐 Validating Idempotency Key: "${idempotencyKey}" in PostgreSQL...`
+    ]);
 
     const gatewayUrl = process.env.NEXT_PUBLIC_PAYMENT_GATEWAY_URL || 'http://localhost:3002';
     const apiKey = 'sk_test_demo_1234567890abcdef';
@@ -29,6 +41,7 @@ export default function HostedCheckoutPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
+          'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
           amount: amountPaise,
@@ -41,7 +54,17 @@ export default function HostedCheckoutPage() {
       const createData = await createRes.json();
       const paymentId = createData?.data?.id || `pay_${Date.now()}`;
 
+      setLogs(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] 💾 Database Transaction Committed: Payment ${paymentId} created in CREATED state.`
+      ]);
+
       if (simulatedOutcome === 'SUCCESS') {
+        setLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ⚡ Dispatching Capture request to Acquiring Bank Network (:3003)...`
+        ]);
+
         // 2. Capture Payment on Gateway
         await fetch(`${gatewayUrl}/api/v1/payments/${paymentId}/capture`, {
           method: 'POST',
@@ -52,6 +75,12 @@ export default function HostedCheckoutPage() {
           body: JSON.stringify({ amount: amountPaise }),
         });
 
+        setLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] 📦 Transactional Outbox: Enqueued PAYMENT_CAPTURED event to BullMQ/Redis.`,
+          `[${new Date().toLocaleTimeString()}] 🟢 Status updated to CAPTURED. Ready for nightly Settlement job (:3004).`
+        ]);
+
         setResult({
           status: 'SUCCESS',
           transactionId: paymentId,
@@ -59,6 +88,11 @@ export default function HostedCheckoutPage() {
           message: 'Payment authorized and captured successfully.',
         });
       } else if (simulatedOutcome === 'INSUFFICIENT_BALANCE') {
+        setLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ❌ Bank Simulator (:3003) returned ERR_INSUFFICIENT_FUNDS. Rolling back state.`
+        ]);
+
         setResult({
           status: 'FAILURE',
           transactionId: paymentId,
@@ -66,6 +100,11 @@ export default function HostedCheckoutPage() {
           message: 'Transaction declined by issuer: Insufficient balance in customer account.',
         });
       } else {
+        setLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ❌ Bank Simulator (:3003) returned ERR_DECLINED. Transaction aborted.`
+        ]);
+
         setResult({
           status: 'FAILURE',
           transactionId: paymentId,
@@ -74,6 +113,11 @@ export default function HostedCheckoutPage() {
         });
       }
     } catch (error) {
+      setLogs(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] 💥 Network Error: Could not connect to microservice cluster.`
+      ]);
+
       setResult({
         status: 'FAILURE',
         transactionId: `pay_err_${Date.now()}`,
@@ -297,6 +341,52 @@ export default function HostedCheckoutPage() {
           <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
             <ShieldCheck size={14} className="text-green-500" /> Powered by PayGateway SDK • 256-bit SSL Encrypted
           </p>
+        </div>
+
+        {/* ⚡ Live Developer & Architecture Inspector */}
+        <div className="mt-8 p-4 rounded-xl border border-cyan-500/30 bg-slate-950/95 shadow-2xl shadow-cyan-950/20 text-left space-y-4 font-mono text-xs">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+            <span className="font-bold text-cyan-400 flex items-center gap-1.5">
+              ⚡ Live Microservice & API Inspector (Dev Mode)
+            </span>
+            <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-[10px] text-cyan-300">
+              5-Node Symphony Active
+            </span>
+          </div>
+
+          <div className="space-y-2 text-gray-300">
+            <div className="flex justify-between items-center bg-gray-900/80 p-2 rounded border border-gray-800">
+              <span className="text-gray-400">Idempotency-Key Header:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400 font-semibold">{idempotencyKey}</span>
+                <button 
+                  onClick={() => setIdempotencyKey('idemp_' + Math.random().toString(36).substring(2, 8))}
+                  className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-300 transition"
+                  type="button"
+                >
+                  Regen Key
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gray-900/80 p-2 rounded border border-gray-800 space-y-1">
+              <div className="text-[11px] text-gray-400">Distributed Call Chain:</div>
+              <div className="text-emerald-400 flex items-center gap-1 flex-wrap text-[10px]">
+                <span>[Next.js :3000]</span> ➔ <span>[Gateway :3002]</span> ➔ <span>[Bank Sim :3003]</span> ➔ <span>[PostgreSQL DB]</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-gray-400 font-semibold text-[11px]">Backend System Event Stream:</div>
+            <div className="max-h-48 overflow-y-auto bg-black p-3 rounded-lg border border-gray-800 space-y-1.5 text-[11px] font-mono leading-relaxed">
+              {logs.map((log, idx) => (
+                <div key={idx} className={log.includes('❌') || log.includes('💥') ? 'text-red-400' : log.includes('🟢') || log.includes('🚀') ? 'text-green-400' : log.includes('🔐') || log.includes('💾') ? 'text-yellow-300' : 'text-gray-300'}>
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -28,6 +28,20 @@ export default async function SettlementsPage() {
         <p className="text-gray-500 mt-1">View bank payouts, fee deductions, and GST breakdowns</p>
       </div>
 
+      <Card className="bg-slate-950 border-cyan-900/50 text-white p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 font-bold text-cyan-400 text-sm">
+            <span>⚡ Automated Double-Entry Ledger Engine (:3004)</span>
+          </div>
+          <span className="px-2.5 py-1 rounded bg-cyan-950 border border-cyan-800 text-xs text-cyan-300 font-mono">
+            BullMQ Background Worker Active
+          </span>
+        </div>
+        <p className="text-xs text-gray-300 leading-relaxed">
+          Unlike basic apps that store flat numbers, this engine isolates transactional float. At daily close, the worker sweeps uncommitted CAPTURED transactions, calculates exact 2.00% Gateway processing fees and 18.00% GST taxes in integer paise, and creates immutable double-entry ledger records ready for bank ACH transfer.
+        </p>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Payout Ledger</CardTitle>
@@ -52,19 +66,23 @@ export default async function SettlementsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {settlements.map((settlement: any) => (
-                  <TableRow key={settlement.id}>
-                    <TableCell className="font-mono text-xs font-medium">{settlement.id}</TableCell>
-                    <TableCell>₹{(settlement.grossAmount / 100).toFixed(2)}</TableCell>
-                    <TableCell className="text-red-600">-₹{(settlement.feeAmount / 100).toFixed(2)}</TableCell>
-                    <TableCell className="text-red-600">-₹{(settlement.taxAmount / 100).toFixed(2)}</TableCell>
-                    <TableCell className="font-bold text-green-600">₹{(settlement.netAmount / 100).toFixed(2)}</TableCell>
-                    <TableCell>{getStatusBadge(settlement.status)}</TableCell>
-                    <TableCell className="text-right text-xs text-gray-500">
-                      {new Date(settlement.createdAt).toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {settlements.map((settlement: any) => {
+                  const fee = settlement.gatewayFee ?? settlement.feeAmount ?? 0;
+                  const tax = settlement.gst ?? settlement.taxAmount ?? 0;
+                  return (
+                    <TableRow key={settlement.id}>
+                      <TableCell className="font-mono text-xs font-medium">{settlement.id}</TableCell>
+                      <TableCell>₹{(settlement.grossAmount / 100).toFixed(2)}</TableCell>
+                      <TableCell className="text-red-600">-₹{(fee / 100).toFixed(2)}</TableCell>
+                      <TableCell className="text-red-600">-₹{(tax / 100).toFixed(2)}</TableCell>
+                      <TableCell className="font-bold text-green-600">₹{(settlement.netAmount / 100).toFixed(2)}</TableCell>
+                      <TableCell>{getStatusBadge(settlement.status)}</TableCell>
+                      <TableCell className="text-right text-xs text-gray-500">
+                        {new Date(settlement.createdAt || settlement.settledAt).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
