@@ -8,6 +8,8 @@ export class ConflictError extends BaseError {
   }
 }
 
+const memoryLock = new Map<string, string>();
+
 export const idempotencyMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   if (req.method !== 'POST' && req.method !== 'PATCH') {
     return next();
@@ -20,15 +22,19 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
 
   const merchantId = req.user?.merchantId;
   if (!merchantId) {
-    return next(); // Should be caught by requireApiKey anyway
+    return next();
   }
 
-  // Redis Key scopes idempotency by merchant and key
   const redisKey = `idempotency:${merchantId}:${idempotencyKey}`;
 
   try {
-    // 1. Check if we already have a saved response
-    const cachedResponse = await redisClient.get(redisKey);
+    let cachedResponse: string | null = null;
+    try {
+      cachedResponse = await redisClient.get(redisKey);
+    } catch (redisErr) {
+      cachedResponse = memoryLock.get(redisKey) || null;
+    }
+
     if (cachedResponse) {
       if (cachedResponse === 'IN_PROGRESS') {
         throw new ConflictError();
@@ -39,22 +45,33 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
       return res.status(parsedResponse.statusCode).json(parsedResponse.body);
     }
 
-    // 2. Acquire lock (SETNX) - expires in 24 hours just in case process crashes
-    const acquired = await redisClient.set(redisKey, 'IN_PROGRESS', 'EX', 86400, 'NX');
+    let acquired: string | null | boolean = null;
+    try {
+      acquired = await redisClient.set(redisKey, 'IN_PROGRESS', 'EX', 86400, 'NX');
+    } catch (redisErr) {
+      if (!memoryLock.has(redisKey)) {
+        memoryLock.set(redisKey, 'IN_PROGRESS');
+        acquired = 'OK';
+      } else {
+        acquired = null;
+      }
+    }
+
     if (!acquired) {
       throw new ConflictError();
     }
 
-    // 3. Intercept res.json to save the response
     const originalJson = res.json.bind(res);
     res.json = (body: any) => {
-      // Save the final response asynchronously
       const responseToCache = {
         statusCode: res.statusCode,
         body,
       };
       
-      redisClient.set(redisKey, JSON.stringify(responseToCache), 'EX', 86400).catch(() => {});
+      const serialized = JSON.stringify(responseToCache);
+      redisClient.set(redisKey, serialized, 'EX', 86400).catch(() => {
+        memoryLock.set(redisKey, serialized);
+      });
       
       return originalJson(body);
     };
