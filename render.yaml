@@ -1,0 +1,30 @@
+services:
+  # Core Payment Gateway Microservice (:3002)
+  - type: web
+    name: payment-gateway
+    runtime: docker
+    dockerfilePath: ./services/payment-gateway/Dockerfile
+    envVars:
+      - key: PORT
+        value: 3002
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: BANK_SIMULATOR_URL
+        value: https://bank-simulator-demo.onrender.com
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # Acquiring Bank Simulator Network (:3003)
+  - type: web
+    name: bank-simulator-demo
+    runtime: docker
+    dockerfilePath: ./services/bank-simulator/Dockerfile
+    envVars:
+      - key: PORT
+        value: 3003
+      - key: NODE_ENV
+        value: production
