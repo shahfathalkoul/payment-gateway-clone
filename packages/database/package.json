@@ -1,0 +1,26 @@
+{
+  "name": "@payment-gateway/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "generate": "prisma generate",
+    "push": "prisma db push",
+    "migrate": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0",
+    "typescript": "^5.5.0",
+    "ts-node": "^10.9.0"
+  }
+}

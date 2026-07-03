@@ -1,0 +1,58 @@
+{
+  "name": "payment-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade Payment Gateway Ecosystem",
+  "author": "Payment Gateway Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "db:generate": "npm run generate --workspace=packages/database",
+    "db:push": "npm run push --workspace=packages/database",
+    "db:migrate": "npm run migrate --workspace=packages/database",
+    "db:seed": "npm run seed --workspace=packages/database",
+    "db:studio": "npm run studio --workspace=packages/database",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "prepare": "husky install",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.3.0",
+    "turbo": "^2.1.0",
+    "typescript": "^5.5.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "docker": "^1.0.0"
+  },
+  "packageManager": "npm@10.8.2"
+}

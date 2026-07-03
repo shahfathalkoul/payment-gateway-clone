@@ -1,0 +1,38 @@
+{
+  "name": "@payment-gateway/merchant-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "nodemon src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@payment-gateway/shared-types": "*",
+    "@payment-gateway/shared-utils": "*",
+    "@payment-gateway/database": "*",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "zod": "^3.23.8",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "express-rate-limit": "^7.2.0",
+    "rate-limit-redis": "^4.2.0",
+    "ioredis": "^5.4.1",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/swagger-ui-express": "^4.1.6"
+  }
+}

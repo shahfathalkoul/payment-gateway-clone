@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-data/
+
+# Prisma
+packages/database/prisma/*.db
+packages/database/prisma/migrations/
+
+# Turbo
+.turbo/
+
+# Temporary
+tmp/
+temp/
+
+# Secrets
+*.pem
+*.key
+*.cert
