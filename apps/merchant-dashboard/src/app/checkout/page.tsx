@@ -19,6 +19,22 @@ export default function HostedCheckoutPage() {
 
   const [amount, setAmount] = useState<number>(1499.00);
 
+  const saveToLocalHistory = (txId: string, status: string, orderId: string) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('demo_checkout_history') || '[]');
+      const newTx = {
+        id: txId,
+        orderId: orderId,
+        amount: Math.round(amount * 100),
+        currency: 'INR',
+        method: method,
+        status: status,
+        createdAt: new Date().toISOString()
+      };
+      localStorage.setItem('demo_checkout_history', JSON.stringify([newTx, ...existing.filter((t: any) => t.id !== txId)]));
+    } catch (e) {}
+  };
+
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -106,6 +122,7 @@ export default function HostedCheckoutPage() {
           arn: `ARN${Math.floor(Math.random() * 8999999999 + 1000000000)}`,
           message: 'Payment authorized and captured successfully.',
         });
+        saveToLocalHistory(paymentId, 'CAPTURED', `ORD-${Date.now().toString().slice(-6)}`);
       } else if (simulatedOutcome === 'INSUFFICIENT_BALANCE') {
         setLogs(prev => [
           ...prev,
@@ -118,6 +135,7 @@ export default function HostedCheckoutPage() {
           errorCode: 'ERR_INSUFFICIENT_FUNDS',
           message: 'Transaction declined by issuer: Insufficient balance in customer account.',
         });
+        saveToLocalHistory(paymentId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
       } else {
         setLogs(prev => [
           ...prev,
@@ -130,6 +148,7 @@ export default function HostedCheckoutPage() {
           errorCode: 'ERR_DECLINED',
           message: 'Transaction declined by bank or network failure.',
         });
+        saveToLocalHistory(paymentId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
       }
     } catch (error) {
       // Graceful fallback for public Vercel showcase when backend microservices are offline
@@ -148,6 +167,7 @@ export default function HostedCheckoutPage() {
           arn: `ARN_DEMO_${Math.floor(100000 + Math.random() * 900000)}`,
           message: 'Payment authorized and captured successfully (Cloud Demo Showcase).',
         });
+        saveToLocalHistory(demoId, 'CAPTURED', `ORD-${Date.now().toString().slice(-6)}`);
       } else {
         setResult({
           status: 'FAILURE',
@@ -155,6 +175,7 @@ export default function HostedCheckoutPage() {
           errorCode: 'ERR_DECLINED_DEMO',
           message: `Simulated bank outcome: ${simulatedOutcome}`,
         });
+        saveToLocalHistory(demoId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
       }
     } finally {
       setLoading(false);
