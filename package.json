@@ -29,7 +29,7 @@
     "db:studio": "npm run studio --workspace=packages/database",
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
-    "prepare": "husky install",
+    "prepare": "husky install || true",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:build": "docker compose build",
