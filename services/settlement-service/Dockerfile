@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy root configurations
-COPY package.json package-lock.json turbo.json ./
+COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY packages ./packages
 COPY services/settlement-service ./services/settlement-service
 
