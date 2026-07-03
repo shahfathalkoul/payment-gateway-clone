@@ -34,6 +34,7 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
         throw new ConflictError();
       }
       
+      res.setHeader('x-idempotency-replay', 'true');
       const parsedResponse = JSON.parse(cachedResponse);
       return res.status(parsedResponse.statusCode).json(parsedResponse.body);
     }

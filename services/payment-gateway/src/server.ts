@@ -15,7 +15,7 @@ app.use((req, _res, next) => {
 });
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', exposedHeaders: ['x-idempotency-replay'] }));
 app.use(express.json());
 
 // Metrics

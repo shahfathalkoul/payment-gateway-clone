@@ -11,6 +11,7 @@ export default function HostedCheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() => `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+  const [lockKey, setLockKey] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     '[System Initialized] Connected to Payment Gateway Microservice (:3002)',
     '[Idempotency Ready] Cryptographic lock key generated for transaction.'
@@ -51,8 +52,26 @@ export default function HostedCheckoutPage() {
         }),
       });
 
+      const isReplay = createRes.headers.get('x-idempotency-replay') === 'true';
       const createData = await createRes.json();
       const paymentId = createData?.data?.id || `pay_${Date.now()}`;
+
+      if (isReplay) {
+        setLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] 🛡️ IDEMPOTENCY REPLAY DETECTED! Key "${idempotencyKey}" hit Redis lock.`,
+          `[${new Date().toLocaleTimeString()}] 🟢 Returned exact cached transaction (${paymentId}) without double-charging or creating database duplicate!`
+        ]);
+        setResult({
+          status: 'SUCCESS',
+          transactionId: paymentId,
+          arn: `ARN_REPLAY_CACHED`,
+          message: '🛡️ Idempotent Replay Intercepted: Returned original payment state without double-charging credit card.',
+          isReplay: true,
+        });
+        setLoading(false);
+        return;
+      }
 
       setLogs(prev => [
         ...prev,
@@ -126,7 +145,9 @@ export default function HostedCheckoutPage() {
       });
     } finally {
       setLoading(false);
-      setIdempotencyKey(`idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+      if (!lockKey) {
+        setIdempotencyKey(`idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+      }
     }
   };
 
@@ -356,16 +377,33 @@ export default function HostedCheckoutPage() {
           </div>
 
           <div className="space-y-2 text-gray-300">
-            <div className="flex justify-between items-center bg-gray-900/80 p-2 rounded border border-gray-800">
-              <span className="text-gray-400">Idempotency-Key Header:</span>
-              <div className="flex items-center gap-2">
-                <span className="text-yellow-400 font-semibold">{idempotencyKey}</span>
+            <div className="flex flex-col gap-1.5 bg-gray-900/90 p-2.5 rounded border border-gray-800">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-[11px]">Idempotency-Key Header:</span>
                 <button 
-                  onClick={() => setIdempotencyKey('idemp_' + Math.random().toString(36).substring(2, 8))}
-                  className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-300 transition"
+                  onClick={() => setLockKey(!lockKey)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition flex items-center gap-1 ${
+                    lockKey ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'
+                  }`}
                   type="button"
                 >
-                  Regen Key
+                  {lockKey ? '🔒 Locked (Testing Replay)' : '🔓 Unlocked (Auto-Regen)'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={idempotencyKey}
+                  onChange={(e) => setIdempotencyKey(e.target.value)}
+                  placeholder="Type custom idempotency key e.g. idemp_123"
+                  className="w-full bg-black/80 border border-gray-700 rounded px-2.5 py-1 text-yellow-400 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                />
+                <button 
+                  onClick={() => setIdempotencyKey('idemp_' + Math.random().toString(36).substring(2, 8))}
+                  className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-300 transition shrink-0"
+                  type="button"
+                >
+                  Regen
                 </button>
               </div>
             </div>
