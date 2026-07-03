@@ -1,4 +1,7 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
+
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install turbo
@@ -20,7 +23,10 @@ RUN npm run db:generate
 # Build the app and its local dependencies via Turbo
 RUN turbo run build --filter=@payment-gateway/merchant-service...
 
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
+
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 ENV NODE_ENV=production

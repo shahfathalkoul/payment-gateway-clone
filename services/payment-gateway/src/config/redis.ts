@@ -8,10 +8,17 @@ const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 export const redisClient = new Redis(redisUrl, {
   maxRetriesPerRequest: null, // Required by BullMQ
   enableReadyCheck: false,
+  retryStrategy(times) {
+    if (times > 3 && (redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1'))) {
+      logger.warn('Redis unreachable on localhost after 3 retries. Disabling further reconnection retries.');
+      return null; // Stop retrying
+    }
+    return Math.min(times * 200, 2000);
+  },
 });
 
 redisClient.on('error', (err) => {
-  logger.error('Redis connection error', { error: err.message });
+  // Catch silent error to avoid unhandled crash
 });
 
 redisClient.on('connect', () => {

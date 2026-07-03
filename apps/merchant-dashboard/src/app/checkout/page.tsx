@@ -40,14 +40,14 @@ export default function HostedCheckoutPage() {
     setLoading(true);
     setResult(null);
 
+    const gatewayUrl = process.env.NEXT_PUBLIC_PAYMENT_GATEWAY_URL || 'http://localhost:3002';
     const timeStr = new Date().toLocaleTimeString();
     setLogs(prev => [
       ...prev,
-      `[${timeStr}] 🚀 POST http://localhost:3002/api/v1/payments (Headers: Authorization Bearer sk_test_demo_...)`,
+      `[${timeStr}] 🚀 POST ${gatewayUrl}/api/v1/payments (Headers: Authorization Bearer sk_test_demo_...)`,
       `[${timeStr}] 🔐 Validating Idempotency Key: "${idempotencyKey}" in PostgreSQL...`
     ]);
 
-    const gatewayUrl = process.env.NEXT_PUBLIC_PAYMENT_GATEWAY_URL || 'http://localhost:3002';
     const apiKey = 'sk_test_demo_1234567890abcdef';
     const amountPaise = Math.round(amount * 100);
 
