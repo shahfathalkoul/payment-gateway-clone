@@ -15,7 +15,8 @@ export async function fetchPayments() {
         'x-merchant-id': MERCHANT_ID,
         'Authorization': `Bearer ${API_KEY}`
       },
-      cache: 'no-store'
+      cache: 'no-store',
+      next: { revalidate: 0 }
     });
     
     if (!res.ok) return { data: [] };
@@ -33,7 +34,8 @@ export async function fetchSettlements() {
         'x-merchant-id': MERCHANT_ID,
         'Authorization': `Bearer ${API_KEY}`
       },
-      cache: 'no-store'
+      cache: 'no-store',
+      next: { revalidate: 0 }
     });
     
     if (!res.ok) return { data: [] };

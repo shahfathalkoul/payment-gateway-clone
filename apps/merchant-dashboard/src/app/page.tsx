@@ -7,6 +7,9 @@ import { ArrowRight, Activity, Wallet, CheckCircle, XCircle } from 'lucide-react
 import Link from 'next/link';
 import { fetchPayments, fetchSettlements } from '@/lib/api';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function Home() {
   const { data: payments = [] } = await fetchPayments();
   const { data: settlements = [] } = await fetchSettlements();

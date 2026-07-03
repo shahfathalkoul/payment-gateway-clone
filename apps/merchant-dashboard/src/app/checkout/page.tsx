@@ -10,7 +10,7 @@ export default function HostedCheckoutPage() {
   const [simulatedOutcome, setSimulatedOutcome] = useState<'SUCCESS' | 'FAILURE' | 'INSUFFICIENT_BALANCE'>('SUCCESS');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState('idemp_order_88321a');
+  const [idempotencyKey, setIdempotencyKey] = useState(() => `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
   const [logs, setLogs] = useState<string[]>([
     '[System Initialized] Connected to Payment Gateway Microservice (:3002)',
     '[Idempotency Ready] Cryptographic lock key generated for transaction.'
@@ -126,6 +126,7 @@ export default function HostedCheckoutPage() {
       });
     } finally {
       setLoading(false);
+      setIdempotencyKey(`idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
     }
   };
 
