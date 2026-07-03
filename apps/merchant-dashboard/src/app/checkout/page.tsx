@@ -17,7 +17,7 @@ export default function HostedCheckoutPage() {
     '[Idempotency Ready] Cryptographic lock key generated for transaction.'
   ]);
 
-  const amount = 1499.00;
+  const [amount, setAmount] = useState<number>(1499.00);
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,10 +215,35 @@ export default function HostedCheckoutPage() {
           </Card>
         ) : (
           <Card className="bg-gray-950 border-gray-800 text-white shadow-2xl">
-            <CardHeader className="border-b border-gray-800 pb-4">
+            <CardHeader className="border-b border-gray-800 pb-4 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Total Payable</span>
-                <span className="text-2xl font-bold text-white">₹{amount.toFixed(2)}</span>
+                <span className="text-sm text-gray-400">Total Payable (INR)</span>
+                <div className="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-blue-500">
+                  <span className="text-gray-400 font-bold">₹</span>
+                  <input 
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(Math.max(1, parseFloat(e.target.value) || 0))}
+                    className="w-24 bg-transparent text-xl font-bold text-white focus:outline-none text-right font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-1.5 pt-1">
+                <span className="text-[10px] text-gray-500 mr-auto">Presets:</span>
+                {[499, 1499, 4999, 25000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmount(preset)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition ${
+                      amount === preset ? 'bg-blue-600 text-white font-bold' : 'bg-gray-900 hover:bg-gray-800 text-gray-400 border border-gray-800'
+                    }`}
+                  >
+                    ₹{preset}
+                  </button>
+                ))}
               </div>
             </CardHeader>
             
