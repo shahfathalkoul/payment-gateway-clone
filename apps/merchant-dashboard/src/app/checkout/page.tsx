@@ -18,35 +18,71 @@ export default function HostedCheckoutPage() {
     setLoading(true);
     setResult(null);
 
-    // Simulate network latency and calling backend gateway + bank simulator
-    setTimeout(() => {
-      setLoading(false);
-      const txId = `txn_${Date.now().toString().slice(-8)}`;
-      const arn = `ARN${Math.floor(Math.random() * 8999999999 + 1000000000)}`;
+    const gatewayUrl = process.env.NEXT_PUBLIC_PAYMENT_GATEWAY_URL || 'http://localhost:3002';
+    const apiKey = 'sk_test_demo_1234567890abcdef';
+    const amountPaise = Math.round(amount * 100);
+
+    try {
+      // 1. Create Payment on Gateway
+      const createRes = await fetch(`${gatewayUrl}/api/v1/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: 'INR',
+          description: `Acme Store Order (${method.toUpperCase()})`,
+          orderId: `ORD-${Date.now().toString().slice(-6)}`,
+        }),
+      });
+
+      const createData = await createRes.json();
+      const paymentId = createData?.data?.id || `pay_${Date.now()}`;
 
       if (simulatedOutcome === 'SUCCESS') {
+        // 2. Capture Payment on Gateway
+        await fetch(`${gatewayUrl}/api/v1/payments/${paymentId}/capture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({ amount: amountPaise }),
+        });
+
         setResult({
           status: 'SUCCESS',
-          transactionId: txId,
-          arn,
+          transactionId: paymentId,
+          arn: `ARN${Math.floor(Math.random() * 8999999999 + 1000000000)}`,
           message: 'Payment authorized and captured successfully.',
         });
       } else if (simulatedOutcome === 'INSUFFICIENT_BALANCE') {
         setResult({
           status: 'FAILURE',
-          transactionId: txId,
+          transactionId: paymentId,
           errorCode: 'ERR_INSUFFICIENT_FUNDS',
           message: 'Transaction declined by issuer: Insufficient balance in customer account.',
         });
       } else {
         setResult({
           status: 'FAILURE',
-          transactionId: txId,
+          transactionId: paymentId,
           errorCode: 'ERR_DECLINED',
           message: 'Transaction declined by bank or network failure.',
         });
       }
-    }, 1500);
+    } catch (error) {
+      setResult({
+        status: 'FAILURE',
+        transactionId: `pay_err_${Date.now()}`,
+        errorCode: 'ERR_NETWORK',
+        message: 'Could not connect to live Payment Gateway service.',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

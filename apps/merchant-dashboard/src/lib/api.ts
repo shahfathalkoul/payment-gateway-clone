@@ -4,13 +4,16 @@ const SETTLEMENT_SERVICE_URL = process.env.NEXT_PUBLIC_SETTLEMENT_SERVICE_URL ||
 
 // Hardcoded merchant ID for demo purposes
 // In a real app, this would come from the authentication context/session
-export const MERCHANT_ID = 'demo-merchant-123';
+// Seeded merchant ID and API key matching prisma/seed.ts
+export const MERCHANT_ID = '11111111-1111-1111-1111-111111111111';
+export const API_KEY = 'sk_test_demo_1234567890abcdef';
 
 export async function fetchPayments() {
   try {
     const res = await fetch(`${PAYMENT_GATEWAY_URL}/api/v1/payments`, {
       headers: {
         'x-merchant-id': MERCHANT_ID,
+        'Authorization': `Bearer ${API_KEY}`
       },
       cache: 'no-store'
     });
@@ -28,6 +31,7 @@ export async function fetchSettlements() {
     const res = await fetch(`${SETTLEMENT_SERVICE_URL}/api/v1/settlements`, {
       headers: {
         'x-merchant-id': MERCHANT_ID,
+        'Authorization': `Bearer ${API_KEY}`
       },
       cache: 'no-store'
     });

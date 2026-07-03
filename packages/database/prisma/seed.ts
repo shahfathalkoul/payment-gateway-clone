@@ -48,12 +48,6 @@ function generateApiKey(prefix: string, type: 'live' | 'test'): {
   return { fullKey, keyPrefix, keyHash };
 }
 
-/**
- * Generates a prefixed ID (e.g. pay_xxxx, rfnd_xxxx, stl_xxxx).
- */
-function prefixedId(prefix: string): string {
-  return `${prefix}_${crypto.randomBytes(12).toString('hex')}`;
-}
 
 // ---------------------------------------------------------------------------
 // Seed Data
@@ -92,10 +86,12 @@ async function main(): Promise<void> {
     },
   });
 
+  const demoMerchantId = '11111111-1111-1111-1111-111111111111';
   const merchant1 = await prisma.merchant.upsert({
     where: { userId: merchant1User.id },
-    update: {},
+    update: { id: demoMerchantId },
     create: {
+      id: demoMerchantId,
       userId: merchant1User.id,
       businessName: 'Acme Electronics Pvt. Ltd.',
       businessUrl: 'https://acme-electronics.example.com',
@@ -109,29 +105,21 @@ async function main(): Promise<void> {
   });
 
   // API Keys for Merchant #1
-  const m1LiveKey = generateApiKey('pk', 'live');
-  const m1TestKey = generateApiKey('pk', 'test');
+  const demoApiKey = 'sk_test_demo_1234567890abcdef';
+  const demoKeyHash = crypto.createHash('sha256').update(demoApiKey).digest('hex');
 
+  await prisma.apiKey.deleteMany({ where: { merchantId: demoMerchantId } });
   await prisma.apiKey.createMany({
     data: [
       {
-        merchantId: merchant1.id,
-        keyPrefix: m1LiveKey.keyPrefix,
-        keyHash: m1LiveKey.keyHash,
-        type: ApiKeyType.LIVE,
-        label: 'Production Key',
-        isActive: true,
-      },
-      {
-        merchantId: merchant1.id,
-        keyPrefix: m1TestKey.keyPrefix,
-        keyHash: m1TestKey.keyHash,
+        merchantId: demoMerchantId,
+        keyPrefix: 'sk_test_demo',
+        keyHash: demoKeyHash,
         type: ApiKeyType.TEST,
-        label: 'Test Key',
+        label: 'Demo Test Key',
         isActive: true,
       },
     ],
-    skipDuplicates: true,
   });
 
   // Balance for Merchant #1
@@ -148,8 +136,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`✅ Merchant #1 created: ${merchant1.businessName} (${merchant1.id})`);
-  console.log(`   Live API Key: ${m1LiveKey.fullKey}`);
-  console.log(`   Test API Key: ${m1TestKey.fullKey}`);
+  console.log(`   Demo Test API Key: ${demoApiKey}`);
 
   // =========================================================================
   // 3. Test Merchant #2 — "QuickMart"
