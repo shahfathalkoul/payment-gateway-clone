@@ -3,6 +3,7 @@ services:
   - type: web
     name: payment-gateway
     runtime: docker
+    plan: free
     dockerfilePath: ./services/payment-gateway/Dockerfile
     envVars:
       - key: PORT
@@ -22,6 +23,7 @@ services:
   - type: web
     name: bank-simulator-demo
     runtime: docker
+    plan: free
     dockerfilePath: ./services/bank-simulator/Dockerfile
     envVars:
       - key: PORT
