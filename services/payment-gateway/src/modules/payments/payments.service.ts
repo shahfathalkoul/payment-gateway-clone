@@ -43,6 +43,10 @@ export class PaymentsService {
     return payment;
   }
 
+  async listPayments(merchantId: string) {
+    return this.repo.findPaymentsByMerchant(merchantId);
+  }
+
   async capturePayment(id: string, merchantId: string, dto: CapturePaymentDTO) {
     const payment = await this.getPayment(id, merchantId);
 

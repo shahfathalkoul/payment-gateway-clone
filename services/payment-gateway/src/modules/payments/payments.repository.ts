@@ -36,6 +36,14 @@ export class PaymentsRepository {
     });
   }
 
+  async findPaymentsByMerchant(merchantId: string): Promise<Payment[]> {
+    return prisma.payment.findMany({
+      where: { merchantId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
   async updatePaymentStatus(
     id: string,
     merchantId: string,
@@ -46,7 +54,7 @@ export class PaymentsRepository {
     return prisma.$transaction(async (tx: any) => {
       // 1. Update Payment
       const payment = await tx.payment.update({
-        where: { id_merchantId: { id, merchantId } },
+        where: { id },
         data: {
           status,
           ...additionalData,

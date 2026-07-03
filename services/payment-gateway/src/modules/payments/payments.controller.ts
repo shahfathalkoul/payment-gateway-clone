@@ -16,6 +16,14 @@ export class PaymentsController {
     res.status(201).json(successResponse(payment, requestId));
   };
 
+  listPayments = async (req: Request, res: Response) => {
+    const merchantId = req.user!.merchantId;
+    const payments = await this.service.listPayments(merchantId);
+    
+    const requestId = getContext().requestId || 'req_unknown';
+    res.status(200).json(successResponse(payments, requestId));
+  };
+
   getPayment = async (req: Request, res: Response) => {
     const merchantId = req.user!.merchantId;
     const { id } = req.params;

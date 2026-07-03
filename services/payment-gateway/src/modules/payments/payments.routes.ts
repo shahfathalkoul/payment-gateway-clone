@@ -43,6 +43,11 @@ const controller = new PaymentsController(service);
 
 router.use(requireApiKey); // All routes require API Key
 
+router.get(
+  '/',
+  asyncHandler(controller.listPayments)
+);
+
 router.post(
   '/',
   idempotencyMiddleware, // Protect payment creation with idempotency
