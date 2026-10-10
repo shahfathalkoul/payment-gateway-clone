@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { AuthRepository } from './auth.repository';
 import { AuthenticationError, ValidationError, daysFromNow } from '@payment-gateway/shared-utils';
@@ -6,6 +7,18 @@ import { MerchantRegistrationDTO, LoginDTO } from '@payment-gateway/shared-types
 
 export class AuthService {
   constructor(private readonly authRepo: AuthRepository) {}
+
+  private async isValidPassword(inputPassword: string, storedHash: string): Promise<boolean> {
+    if (!storedHash) return false;
+
+    const bcryptMatches = await bcrypt.compare(inputPassword, storedHash);
+    if (bcryptMatches) {
+      return true;
+    }
+
+    const legacySha256Hash = crypto.createHash('sha256').update(inputPassword).digest('hex');
+    return legacySha256Hash === storedHash;
+  }
 
   async register(data: MerchantRegistrationDTO) {
     const existingUser = await this.authRepo.findUserByEmail(data.email);
@@ -35,7 +48,7 @@ export class AuthService {
       throw new AuthenticationError('Invalid credentials');
     }
 
-    const isValidPassword = await bcrypt.compare(data.password, user.passwordHash);
+    const isValidPassword = await this.isValidPassword(data.password, user.passwordHash);
     if (!isValidPassword) {
       throw new AuthenticationError('Invalid credentials');
     }
@@ -48,10 +61,12 @@ export class AuthService {
   private async generateTokens(userId: string, merchantId?: string, role: string = 'MERCHANT') {
     const accessSecret = process.env.JWT_ACCESS_SECRET || 'fallback_access_secret';
     const refreshSecret = process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret';
-    
+    const accessJti = crypto.randomUUID();
+    const refreshJti = crypto.randomUUID();
+
     // Default: 15m access, 7d refresh
-    const accessToken = jwt.sign({ userId, merchantId, role }, accessSecret, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ userId, merchantId, role }, refreshSecret, { expiresIn: '7d' });
+    const accessToken = jwt.sign({ userId, merchantId, role, jti: accessJti }, accessSecret, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId, merchantId, role, jti: refreshJti }, refreshSecret, { expiresIn: '7d' });
 
     const expiresAt = daysFromNow(7);
     await this.authRepo.saveRefreshToken(userId, refreshToken, expiresAt);

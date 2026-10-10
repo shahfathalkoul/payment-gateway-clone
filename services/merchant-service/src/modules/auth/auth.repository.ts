@@ -28,8 +28,14 @@ export class AuthRepository {
   }
 
   async saveRefreshToken(userId: string, token: string, expiresAt: Date): Promise<RefreshToken> {
-    return prisma.refreshToken.create({
-      data: {
+    return prisma.refreshToken.upsert({
+      where: { token },
+      update: {
+        userId,
+        expiresAt,
+        isRevoked: false,
+      },
+      create: {
         userId,
         token,
         expiresAt,

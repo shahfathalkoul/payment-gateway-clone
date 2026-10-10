@@ -3,19 +3,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-gray-900 text-gray-50 hover:bg-gray-900/80 dark:bg-gray-50 dark:text-gray-900 dark:hover:bg-gray-50/80",
+          "border-transparent bg-blue-50 text-blue-700 hover:bg-blue-100",
         secondary:
-          "border-transparent bg-gray-100 text-gray-900 hover:bg-gray-100/80 dark:bg-gray-800 dark:text-gray-50 dark:hover:bg-gray-800/80",
+          "border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200",
         destructive:
-          "border-transparent bg-red-100 text-red-900 hover:bg-red-100/80 dark:bg-red-900 dark:text-gray-50 dark:hover:bg-red-900/80",
-        outline: "text-gray-950 dark:text-gray-50",
-        success: "border-transparent bg-green-100 text-green-900",
-        warning: "border-transparent bg-yellow-100 text-yellow-900",
+          "border-transparent bg-red-100 text-red-700 hover:bg-red-200",
+        outline: "border-[var(--border)] bg-white text-[var(--midnight-navy)]",
+        success: "border-transparent bg-emerald-50 text-emerald-700",
+        warning: "border-transparent bg-amber-50 text-amber-700",
       },
     },
     defaultVariants: {

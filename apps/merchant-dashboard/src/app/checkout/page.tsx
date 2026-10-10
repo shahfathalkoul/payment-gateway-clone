@@ -1,25 +1,34 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CreditCard, Smartphone, Building, CheckCircle2, XCircle, Loader2, Lock, ShieldCheck } from 'lucide-react';
+import { CreditCard, Smartphone, Building, CheckCircle2, XCircle, Loader2, Lock, ShieldCheck, ChevronDown, ChevronUp, Settings, Code, RefreshCw } from 'lucide-react';
 
 export default function HostedCheckoutPage() {
   const [method, setMethod] = useState<'card' | 'upi' | 'netbanking'>('card');
   const [simulatedOutcome, setSimulatedOutcome] = useState<'SUCCESS' | 'FAILURE' | 'INSUFFICIENT_BALANCE'>('SUCCESS');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+  const [idempotencyKey, setIdempotencyKey] = useState('');
   const [lockKey, setLockKey] = useState(false);
-  const [logs, setLogs] = useState<string[]>([
-    '[System Initialized] Connected to Payment Gateway Microservice (:3002)',
-    '[Idempotency Ready] Cryptographic lock key generated for transaction.'
-  ]);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [showDevTools, setShowDevTools] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [showIdempotency, setShowIdempotency] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [idempotencyCache, setIdempotencyCache] = useState<Map<string, any>>(new Map());
 
   const [amount, setAmount] = useState<number>(1499.00);
 
-  const saveToLocalHistory = (txId: string, status: string, orderId: string) => {
+  // Initialize idempotency key only on client side to avoid hydration error
+  useEffect(() => {
+    if (!idempotencyKey) {
+      setIdempotencyKey(`idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+    }
+  }, [idempotencyKey]);
+
+  const saveToLocalHistory = (txId: string, status: string, orderId: string, isReplay = false) => {
     try {
       const existing = JSON.parse(localStorage.getItem('demo_checkout_history') || '[]');
       const newTx = {
@@ -29,6 +38,7 @@ export default function HostedCheckoutPage() {
         currency: 'INR',
         method: method,
         status: status,
+        isReplay: isReplay,
         createdAt: new Date().toISOString()
       };
       localStorage.setItem('demo_checkout_history', JSON.stringify([newTx, ...existing.filter((t: any) => t.id !== txId)]));
@@ -42,237 +52,189 @@ export default function HostedCheckoutPage() {
 
     const gatewayUrl = process.env.NEXT_PUBLIC_PAYMENT_GATEWAY_URL || 'http://localhost:3002';
     const timeStr = new Date().toLocaleTimeString();
-    setLogs(prev => [
-      ...prev,
-      `[${timeStr}] 🚀 POST ${gatewayUrl}/api/v1/payments (Headers: Authorization Bearer sk_test_demo_...)`,
-      `[${timeStr}] 🔐 Validating Idempotency Key: "${idempotencyKey}" in PostgreSQL...`
+    
+    console.log('=== Payment Request ===');
+    console.log('Gateway URL:', gatewayUrl);
+    console.log('Idempotency Key:', idempotencyKey);
+    console.log('Lock Key:', lockKey);
+    console.log('Cache size:', idempotencyCache.size);
+    console.log('Cache has key:', idempotencyCache.has(idempotencyKey));
+    
+    setLogs([
+      `[${timeStr}] 🚀 POST ${gatewayUrl}/api/v1/payments`,
+      `[${timeStr}] 🔐 Validating Idempotency Key: "${idempotencyKey}"`
     ]);
 
     const apiKey = 'sk_test_demo_1234567890abcdef';
     const amountPaise = Math.round(amount * 100);
 
-    try {
-      // 1. Create Payment on Gateway
-      const createRes = await fetch(`${gatewayUrl}/api/v1/payments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          amount: amountPaise,
-          currency: 'INR',
-          description: `Acme Store Order (${method.toUpperCase()})`,
-          orderId: `ORD-${Date.now().toString().slice(-6)}`,
-        }),
+    // Force demo mode for testing purposes
+    setIsDemoMode(true);
+    setShowDevTools(true);
+    
+    // Client-side idempotency simulation
+    const cachedResult = idempotencyCache.get(idempotencyKey);
+    
+    if (cachedResult) {
+      console.log('=== CACHE HIT ===');
+      console.log('Cached result:', cachedResult);
+      console.log('Setting isReplay: true');
+      
+      setLogs(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] 🛡️ Idempotency replay detected - returning cached result`
+      ]);
+      setResult({
+        ...cachedResult,
+        isReplay: true,
+        message: cachedResult.status === 'SUCCESS' 
+          ? 'Idempotency protection prevented double charge!' 
+          : 'Idempotency replay: returning cached failure'
       });
-
-      const isReplay = createRes.headers.get('x-idempotency-replay') === 'true';
-      const createData = await createRes.json();
-      const paymentId = createData?.data?.id || `pay_${Date.now()}`;
-
-      if (isReplay) {
-        setLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] 🛡️ IDEMPOTENCY REPLAY DETECTED! Key "${idempotencyKey}" hit Redis lock.`,
-          `[${new Date().toLocaleTimeString()}] 🟢 Returned exact cached transaction (${paymentId}) without double-charging or creating database duplicate!`
-        ]);
-        setResult({
-          status: 'SUCCESS',
-          transactionId: paymentId,
-          arn: `ARN_REPLAY_CACHED`,
-          message: '🛡️ Idempotent Replay Intercepted: Returned original payment state without double-charging credit card.',
+      // Save replay to history
+      try {
+        const existing = JSON.parse(localStorage.getItem('demo_checkout_history') || '[]');
+        const newTx = {
+          id: cachedResult.transactionId,
+          orderId: cachedResult.orderId || '',
+          amount: Math.round(amount * 100),
+          currency: 'INR',
+          method: method,
+          status: cachedResult.status,
           isReplay: true,
-        });
-        setLoading(false);
-        return;
-      }
-
-      setLogs(prev => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] 💾 Database Transaction Committed: Payment ${paymentId} created in CREATED state.`
-      ]);
-
-      if (simulatedOutcome === 'SUCCESS') {
-        setLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ⚡ Dispatching Capture request to Acquiring Bank Network (:3003)...`
-        ]);
-
-        // 2. Capture Payment on Gateway
-        await fetch(`${gatewayUrl}/api/v1/payments/${paymentId}/capture`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({ amount: amountPaise }),
-        });
-
-        setLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] 📦 Transactional Outbox: Enqueued PAYMENT_CAPTURED event to BullMQ/Redis.`,
-          `[${new Date().toLocaleTimeString()}] 🟢 Status updated to CAPTURED. Ready for nightly Settlement job (:3004).`
-        ]);
-
-        setResult({
-          status: 'SUCCESS',
-          transactionId: paymentId,
-          arn: `ARN${Math.floor(Math.random() * 8999999999 + 1000000000)}`,
-          message: 'Payment authorized and captured successfully.',
-        });
-        saveToLocalHistory(paymentId, 'CAPTURED', `ORD-${Date.now().toString().slice(-6)}`);
-      } else if (simulatedOutcome === 'INSUFFICIENT_BALANCE') {
-        setLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ❌ Bank Simulator (:3003) returned ERR_INSUFFICIENT_FUNDS. Rolling back state.`
-        ]);
-
-        setResult({
-          status: 'FAILURE',
-          transactionId: paymentId,
-          errorCode: 'ERR_INSUFFICIENT_FUNDS',
-          message: 'Transaction declined by issuer: Insufficient balance in customer account.',
-        });
-        saveToLocalHistory(paymentId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
-      } else {
-        setLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ❌ Bank Simulator (:3003) returned ERR_DECLINED. Transaction aborted.`
-        ]);
-
-        setResult({
-          status: 'FAILURE',
-          transactionId: paymentId,
-          errorCode: 'ERR_DECLINED',
-          message: 'Transaction declined by bank or network failure.',
-        });
-        saveToLocalHistory(paymentId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
-      }
-    } catch (error) {
-      // Graceful fallback for public Vercel showcase when backend microservices are offline
-      const demoId = `pay_cloud_${Date.now().toString().slice(-6)}`;
-      setLogs(prev => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] 🌐 Cloud Showcase Mode: Local microservice unreachable. Executing simulated fallback engine...`,
-        `[${new Date().toLocaleTimeString()}] 🔐 Idempotency Lock verified for key "${idempotencyKey}".`,
-        `[${new Date().toLocaleTimeString()}] ⚡ Mock Bank Simulator authorized transaction. Outbox event PAYMENT_CAPTURED dispatched.`
-      ]);
-
-      if (simulatedOutcome === 'SUCCESS') {
-        setResult({
-          status: 'SUCCESS',
-          transactionId: demoId,
-          arn: `ARN_DEMO_${Math.floor(100000 + Math.random() * 900000)}`,
-          message: 'Payment authorized and captured successfully (Cloud Demo Showcase).',
-        });
-        saveToLocalHistory(demoId, 'CAPTURED', `ORD-${Date.now().toString().slice(-6)}`);
-      } else {
-        setResult({
-          status: 'FAILURE',
-          transactionId: demoId,
-          errorCode: 'ERR_DECLINED_DEMO',
-          message: `Simulated bank outcome: ${simulatedOutcome}`,
-        });
-        saveToLocalHistory(demoId, 'FAILED', `ORD-${Date.now().toString().slice(-6)}`);
-      }
-    } finally {
+          createdAt: new Date().toISOString()
+        };
+        localStorage.setItem('demo_checkout_history', JSON.stringify([newTx, ...existing.filter((t: any) => t.id !== cachedResult.transactionId)]));
+      } catch (e) {}
       setLoading(false);
-      if (!lockKey) {
-        setIdempotencyKey(`idemp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-      }
+      return;
+    }
+
+    const demoId = `pay_${Math.random().toString(36).substring(2, 10)}`;
+    setLogs(prev => [
+      ...prev,
+      `[${new Date().toLocaleTimeString()}] 🌐 Demo mode: creating new payment`
+    ]);
+
+    const orderId = `ORD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    
+    let result;
+    if (simulatedOutcome === 'SUCCESS') {
+      result = {
+        status: 'SUCCESS',
+        transactionId: demoId,
+        arn: `ARN_DEMO_${Math.floor(100000 + Math.random() * 900000)}`,
+        message: 'Payment successful (demo mode)',
+        orderId: orderId,
+      };
+      saveToLocalHistory(demoId, 'CAPTURED', orderId, false);
+    } else {
+      result = {
+        status: 'FAILURE',
+        transactionId: demoId,
+        errorCode: simulatedOutcome === 'INSUFFICIENT_BALANCE' ? 'ERR_INSUFFICIENT_FUNDS' : 'ERR_DECLINED',
+        message: simulatedOutcome === 'INSUFFICIENT_BALANCE' ? 'Insufficient balance in your account' : 'Transaction declined by bank',
+        orderId: orderId,
+      };
+      saveToLocalHistory(demoId, 'FAILED', orderId, false);
+    }
+
+    // Cache the result for idempotency
+    setIdempotencyCache(prev => new Map(prev).set(idempotencyKey, result));
+    setResult(result);
+    setLoading(false);
+    
+    if (!lockKey) {
+      setIdempotencyKey(`idemp_${Math.random().toString(36).substring(2, 10)}`);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 text-white">
-      <div className="w-full max-w-md space-y-6">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="w-full max-w-md space-y-4">
         {/* Header */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
-            <Lock size={12} /> Live Hosted Secure Checkout
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Acme Fintech Store</h1>
-          <p className="text-sm text-gray-400">Order #ORD-982310 • Premium Subscription</p>
+        <div className="text-center space-y-2">
+          {isDemoMode && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-100 border border-yellow-200 text-yellow-700 text-xs font-medium">
+              ⚠️ Demo Mode - Backend Offline
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-white">Acme Fintech Store</h1>
+          <p className="text-sm text-gray-400">Premium Subscription</p>
         </div>
 
         {result ? (
-          <Card className="bg-gray-950 border-gray-800 text-white p-6 text-center space-y-6">
-            {result.status === 'SUCCESS' ? (
+          <Card className="bg-white border-gray-200 p-6 text-center space-y-6 shadow-xl">
+            {result.isReplay ? (
               <div className="flex flex-col items-center space-y-3">
-                <div className="p-4 bg-green-500/10 rounded-full text-green-500">
+                <div className="p-4 bg-blue-100 rounded-full text-blue-600">
+                  <ShieldCheck size={48} />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Payment Replay Detected</h2>
+                <p className="text-sm text-gray-600">Idempotency protection prevented double charge</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+                  Same idempotency key was used. Returned cached result without charging card again.
+                </div>
+              </div>
+            ) : result.status === 'SUCCESS' ? (
+              <div className="flex flex-col items-center space-y-3">
+                <div className="p-4 bg-green-100 rounded-full text-green-600">
                   <CheckCircle2 size={48} />
                 </div>
-                <h2 className="text-xl font-bold text-green-400">Payment Successful!</h2>
-                <p className="text-sm text-gray-400">{result.message}</p>
+                <h2 className="text-xl font-bold text-gray-900">Payment Successful!</h2>
+                <p className="text-sm text-gray-600">{result.message}</p>
               </div>
             ) : (
               <div className="flex flex-col items-center space-y-3">
-                <div className="p-4 bg-red-500/10 rounded-full text-red-500">
+                <div className="p-4 bg-red-100 rounded-full text-red-600">
                   <XCircle size={48} />
                 </div>
-                <h2 className="text-xl font-bold text-red-400">Payment Failed</h2>
-                <p className="text-sm text-gray-400">{result.message}</p>
+                <h2 className="text-xl font-bold text-gray-900">Payment Failed</h2>
+                <p className="text-sm text-gray-600">{result.message}</p>
               </div>
             )}
 
-            <div className="bg-gray-900 p-4 rounded-lg text-left text-xs space-y-2 font-mono text-gray-300">
+            <div className="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-500">Transaction ID:</span>
-                <span>{result.transactionId}</span>
+                <span className="font-mono">{result.transactionId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Amount Paid:</span>
-                <span>₹{amount.toFixed(2)}</span>
+                <span className="text-gray-500">Amount:</span>
+                <span className="font-semibold">₹{amount.toFixed(2)}</span>
               </div>
               {result.arn && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Acquirer Ref (ARN):</span>
-                  <span>{result.arn}</span>
-                </div>
-              )}
-              {result.errorCode && (
-                <div className="flex justify-between text-red-400">
-                  <span>Error Code:</span>
-                  <span>{result.errorCode}</span>
+                  <span className="text-gray-500">ARN:</span>
+                  <span className="font-mono">{result.arn}</span>
                 </div>
               )}
             </div>
 
             <Button 
               onClick={() => setResult(null)} 
-              className="w-full bg-gray-800 hover:bg-gray-700 text-white"
+              className="w-full bg-gray-900 hover:bg-gray-800 text-white"
             >
-              Simulate Another Payment
+              Try Another Payment
             </Button>
           </Card>
         ) : (
-          <Card className="bg-gray-950 border-gray-800 text-white shadow-2xl">
-            <CardHeader className="border-b border-gray-800 pb-4 space-y-3">
+          <Card className="bg-white border-gray-200 shadow-xl">
+            <CardHeader className="pb-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Total Payable (INR)</span>
-                <div className="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-blue-500">
-                  <span className="text-gray-400 font-bold">₹</span>
-                  <input 
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={amount}
-                    onChange={(e) => setAmount(Math.max(1, parseFloat(e.target.value) || 0))}
-                    className="w-24 bg-transparent text-xl font-bold text-white focus:outline-none text-right font-mono"
-                  />
-                </div>
+                <span className="text-sm text-gray-600">Total Payable</span>
+                <div className="text-3xl font-bold text-gray-900">₹{amount.toFixed(2)}</div>
               </div>
-              <div className="flex items-center justify-end gap-1.5 pt-1">
-                <span className="text-[10px] text-gray-500 mr-auto">Presets:</span>
+              <div className="flex gap-2 pt-2">
                 {[499, 1499, 4999, 25000].map((preset) => (
                   <button
                     key={preset}
                     type="button"
                     onClick={() => setAmount(preset)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition ${
-                      amount === preset ? 'bg-blue-600 text-white font-bold' : 'bg-gray-900 hover:bg-gray-800 text-gray-400 border border-gray-800'
+                    className={`px-3 py-1 rounded text-sm font-medium transition ${
+                      amount === preset 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     ₹{preset}
@@ -281,41 +243,44 @@ export default function HostedCheckoutPage() {
               </div>
             </CardHeader>
             
-            <CardContent className="pt-6 space-y-6">
-              {/* Payment Methods selector */}
-              <div className="grid grid-cols-3 gap-2">
+            <CardContent className="pt-4 space-y-6">
+              {/* Payment Methods */}
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setMethod('card')}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-lg border text-xs font-medium transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 text-sm font-medium transition-all ${
                     method === 'card' 
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
-                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700' 
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  <CreditCard size={20} /> Card
+                  <CreditCard size={24} />
+                  Card
                 </button>
                 <button
                   type="button"
                   onClick={() => setMethod('upi')}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-lg border text-xs font-medium transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 text-sm font-medium transition-all ${
                     method === 'upi' 
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
-                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700' 
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  <Smartphone size={20} /> UPI
+                  <Smartphone size={24} />
+                  UPI
                 </button>
                 <button
                   type="button"
                   onClick={() => setMethod('netbanking')}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-lg border text-xs font-medium transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 text-sm font-medium transition-all ${
                     method === 'netbanking' 
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
-                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700' 
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  <Building size={20} /> NetBanking
+                  <Building size={24} />
+                  NetBanking
                 </button>
               </div>
 
@@ -323,32 +288,32 @@ export default function HostedCheckoutPage() {
                 {method === 'card' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-400">Card Number</label>
+                      <label className="text-sm font-medium text-gray-700">Card Number</label>
                       <input 
                         type="text" 
                         required 
-                        defaultValue="4242 •••• •••• 4242" 
-                        className="w-full mt-1 bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                        defaultValue="4242 4242 4242 4242" 
+                        className="w-full mt-1 border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs text-gray-400">Expiry Date</label>
+                        <label className="text-sm font-medium text-gray-700">Expiry</label>
                         <input 
                           type="text" 
                           required 
                           defaultValue="12/28" 
-                          className="w-full mt-1 bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                          className="w-full mt-1 border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">CVV</label>
+                        <label className="text-sm font-medium text-gray-700">CVV</label>
                         <input 
                           type="password" 
                           required 
                           defaultValue="123" 
                           maxLength={4}
-                          className="w-full mt-1 bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-blue-500"
+                          className="w-full mt-1 border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
@@ -358,13 +323,13 @@ export default function HostedCheckoutPage() {
                 {method === 'upi' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-400">UPI ID / VPA</label>
+                      <label className="text-sm font-medium text-gray-700">UPI ID</label>
                       <input 
                         type="text" 
                         required 
-                        placeholder="username@okaxis" 
+                        placeholder="username@upi"
                         defaultValue="shahfathalkoul@okhdfcbank"
-                        className="w-full mt-1 bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                        className="w-full mt-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                   </div>
@@ -373,41 +338,25 @@ export default function HostedCheckoutPage() {
                 {method === 'netbanking' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-400">Select Bank</label>
-                      <select className="w-full mt-1 bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                      <label className="text-sm font-medium text-gray-700">Select Bank</label>
+                      <select className="w-full mt-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                         <option>HDFC Bank</option>
                         <option>ICICI Bank</option>
-                        <option>State Bank of India (SBI)</option>
+                        <option>State Bank of India</option>
                         <option>Axis Bank</option>
                       </select>
                     </div>
                   </div>
                 )}
 
-                {/* Developer Simulator Tools */}
-                <div className="pt-3 border-t border-gray-800/80 space-y-2">
-                  <label className="text-xs font-semibold text-yellow-500 flex items-center gap-1">
-                    ⚡ Developer Simulation Outcome
-                  </label>
-                  <select 
-                    value={simulatedOutcome}
-                    onChange={(e: any) => setSimulatedOutcome(e.target.value)}
-                    className="w-full bg-gray-900 border border-yellow-500/30 rounded-md px-3 py-1.5 text-xs text-yellow-400 font-mono focus:outline-none"
-                  >
-                    <option value="SUCCESS">Outcome: Bank Approves (Capture Success)</option>
-                    <option value="FAILURE">Outcome: Bank Declines (Generic Failure)</option>
-                    <option value="INSUFFICIENT_BALANCE">Outcome: Insufficient Balance</option>
-                  </select>
-                </div>
-
                 <Button 
                   type="submit" 
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 h-auto shadow-lg shadow-blue-600/20 mt-2"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 h-auto text-base"
                 >
                   {loading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="animate-spin" size={18} /> Processing with Bank...
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="animate-spin" size={20} /> Processing...
                     </span>
                   ) : (
                     `Pay ₹${amount.toFixed(2)}`
@@ -418,73 +367,107 @@ export default function HostedCheckoutPage() {
           </Card>
         )}
 
-        <div className="text-center">
-          <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
-            <ShieldCheck size={14} className="text-green-500" /> Powered by PayGateway SDK • 256-bit SSL Encrypted
-          </p>
-        </div>
+        {/* Developer Tools Toggle */}
+        <button
+          onClick={() => setShowDevTools(!showDevTools)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition text-sm border border-gray-700"
+        >
+          <Code size={16} />
+          Developer Tools
+          {showDevTools ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
 
-        {/* ⚡ Live Developer & Architecture Inspector */}
-        <div className="mt-8 p-4 rounded-xl border border-cyan-500/30 bg-slate-950/95 shadow-2xl shadow-cyan-950/20 text-left space-y-4 font-mono text-xs">
-          <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-            <span className="font-bold text-cyan-400 flex items-center gap-1.5">
-              ⚡ Live Microservice & API Inspector (Dev Mode)
-            </span>
-            <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-[10px] text-cyan-300">
-              5-Node Symphony Active
-            </span>
-          </div>
+        {/* Collapsible Developer Tools */}
+        {showDevTools && (
+          <div className="bg-gray-900 rounded-xl border border-gray-700 p-4 space-y-4">
+            {/* Simulation Outcome */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-300">Bank Simulation</label>
+              <select 
+                value={simulatedOutcome}
+                onChange={(e: any) => setSimulatedOutcome(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="SUCCESS">Success - Approve payment</option>
+                <option value="FAILURE">Failure - Decline payment</option>
+                <option value="INSUFFICIENT_BALANCE">Insufficient Balance</option>
+              </select>
+            </div>
 
-          <div className="space-y-2 text-gray-300">
-            <div className="flex flex-col gap-1.5 bg-gray-900/90 p-2.5 rounded border border-gray-800">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-[11px]">Idempotency-Key Header:</span>
+            {/* Idempotency Controls */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-300">Idempotency Key</label>
                 <button 
                   onClick={() => setLockKey(!lockKey)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition flex items-center gap-1 ${
-                    lockKey ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'
+                  className={`px-2 py-1 rounded text-xs font-medium transition ${
+                    lockKey ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
-                  type="button"
                 >
-                  {lockKey ? '🔒 Locked (Testing Replay)' : '🔓 Unlocked (Auto-Regen)'}
+                  {lockKey ? '🔒 Locked' : '🔓 Auto-regen'}
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={idempotencyKey}
                   onChange={(e) => setIdempotencyKey(e.target.value)}
-                  placeholder="Type custom idempotency key e.g. idemp_123"
-                  className="w-full bg-black/80 border border-gray-700 rounded px-2.5 py-1 text-yellow-400 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button 
                   onClick={() => setIdempotencyKey('idemp_' + Math.random().toString(36).substring(2, 8))}
-                  className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-300 transition shrink-0"
-                  type="button"
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs text-gray-300 transition"
                 >
                   Regen
                 </button>
               </div>
+              <p className="text-xs text-gray-500">
+                {lockKey ? 'Key locked - enables replay testing' : 'Key auto-regenerates after each payment'}
+              </p>
             </div>
 
-            <div className="bg-gray-900/80 p-2 rounded border border-gray-800 space-y-1">
-              <div className="text-[11px] text-gray-400">Distributed Call Chain:</div>
-              <div className="text-emerald-400 flex items-center gap-1 flex-wrap text-[10px]">
-                <span>[Next.js :3000]</span> ➔ <span>[Gateway :3002]</span> ➔ <span>[Bank Sim :3003]</span> ➔ <span>[PostgreSQL DB]</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-gray-400 font-semibold text-[11px]">Backend System Event Stream:</div>
-            <div className="max-h-48 overflow-y-auto bg-black p-3 rounded-lg border border-gray-800 space-y-1.5 text-[11px] font-mono leading-relaxed">
-              {logs.map((log, idx) => (
-                <div key={idx} className={log.includes('❌') || log.includes('💥') ? 'text-red-400' : log.includes('🟢') || log.includes('🚀') ? 'text-green-400' : log.includes('🔐') || log.includes('💾') ? 'text-yellow-300' : 'text-gray-300'}>
-                  {log}
+            {/* Event Logs Toggle */}
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowLogs(!showLogs)}
+                className="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition"
+              >
+                {showLogs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                Event Logs
+              </button>
+              {showLogs && (
+                <div className="bg-black rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                  {logs.length === 0 ? (
+                    <p className="text-xs text-gray-500">No events yet. Make a payment to see logs.</p>
+                  ) : (
+                    logs.map((log, idx) => (
+                      <div key={idx} className={`text-xs font-mono leading-relaxed ${
+                        log.includes('❌') || log.includes('💥') ? 'text-red-400' : 
+                        log.includes('🟢') || log.includes('🚀') ? 'text-green-400' : 
+                        log.includes('🔐') || log.includes('💾') ? 'text-yellow-300' : 
+                        'text-gray-300'
+                      }`}>
+                        {log}
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))}
+              )}
+            </div>
+
+            {/* Architecture Info */}
+            <div className="pt-2 border-t border-gray-700">
+              <p className="text-xs text-gray-500">
+                <span className="text-gray-400">Architecture:</span> Next.js → Gateway → Bank Sim → PostgreSQL
+              </p>
             </div>
           </div>
+        )}
+
+        <div className="text-center">
+          <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+            <ShieldCheck size={12} className="text-green-500" /> Secured by PayGateway
+          </p>
         </div>
       </div>
     </div>

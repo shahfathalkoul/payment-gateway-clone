@@ -12,6 +12,7 @@
 // =============================================================================
 
 import { PrismaClient, UserRole, MerchantStatus, ApiKeyType } from '@prisma/client';
+import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
@@ -21,15 +22,10 @@ const prisma = new PrismaClient();
 // ---------------------------------------------------------------------------
 
 /**
- * Simple SHA-256 hash for seeding purposes.
- *
- * ⚠️  The real application uses bcrypt with 12 salt rounds for password
- * hashing. This function exists only to avoid a bcrypt dependency in the
- * seed script.
+ * Generate the same bcrypt hash format used by the application.
  */
 function hashPassword(password: string): string {
-  // In production: bcrypt.hashSync(password, 12)
-  return crypto.createHash('sha256').update(password).digest('hex');
+  return bcrypt.hashSync(password, 12);
 }
 
 /**

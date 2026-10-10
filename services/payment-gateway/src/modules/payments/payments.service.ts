@@ -1,6 +1,7 @@
 import { PaymentsRepository } from './payments.repository';
 import { BaseError, generateUUID } from '@payment-gateway/shared-utils';
 import { CreatePaymentDTO } from '@payment-gateway/shared-types';
+import { prisma } from '@payment-gateway/database';
 
 export type CapturePaymentDTO = { amount?: number };
 
@@ -13,7 +14,33 @@ export class PaymentStateError extends BaseError {
 export class PaymentsService {
   constructor(private readonly repo: PaymentsRepository) {}
 
-  async createPayment(merchantId: string, dto: CreatePaymentDTO) {
+  async createPayment(merchantId: string, dto: CreatePaymentDTO, idempotencyKey?: string) {
+    // Check idempotency if key is provided
+    if (idempotencyKey) {
+      const existingKey = await prisma.idempotencyKey.findUnique({
+        where: {
+          key_merchantId: {
+            key: idempotencyKey,
+            merchantId: merchantId
+          }
+        }
+      });
+
+      if (existingKey) {
+        // Return the cached payment
+        const cachedPayment = await prisma.payment.findFirst({
+          where: {
+            idempotencyKey: idempotencyKey,
+            merchantId: merchantId
+          }
+        });
+        
+        if (cachedPayment) {
+          return { ...cachedPayment, _isReplay: true };
+        }
+      }
+    }
+
     const paymentId = `pay_${generateUUID().replace(/-/g, '').slice(0, 16)}`;
     
     const payment = await this.repo.createPaymentWithEvent(
@@ -24,6 +51,7 @@ export class PaymentsService {
         currency: dto.currency || 'INR',
         description: dto.description,
         orderId: dto.orderId,
+        idempotencyKey: idempotencyKey,
         status: 'CREATED',
         customer: dto.customerId ? {
           connect: { id: dto.customerId }
@@ -31,6 +59,21 @@ export class PaymentsService {
       } as any, // Using any for relation shorthand; in prod, structure strictly
       'PAYMENT_CREATED'
     );
+
+    // Store idempotency key if provided
+    if (idempotencyKey) {
+      await prisma.idempotencyKey.create({
+        data: {
+          key: idempotencyKey,
+          merchantId: merchantId,
+          requestPath: '/api/v1/payments',
+          requestMethod: 'POST',
+          responseCode: 201,
+          responseBody: JSON.stringify({ transactionId: paymentId }),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        }
+      });
+    }
 
     return payment;
   }

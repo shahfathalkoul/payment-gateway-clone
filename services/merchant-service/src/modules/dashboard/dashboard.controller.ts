@@ -13,6 +13,14 @@ export class DashboardController {
     res.status(200).json(successResponse(profile, requestId));
   };
 
+  updateProfile = async (req: Request, res: Response) => {
+    const merchantId = req.user!.merchantId!;
+    const profile = await this.dashboardService.updateProfile(merchantId, req.body);
+    const requestId = getContext().requestId || 'req_unknown';
+
+    res.status(200).json(successResponse(profile, requestId));
+  };
+
   getAnalytics = async (req: Request, res: Response) => {
     const merchantId = req.user!.merchantId!;
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;

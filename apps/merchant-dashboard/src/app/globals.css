@@ -6,26 +6,106 @@
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #0a0a0a;
-  --radius: 0.5rem;
+  --midnight-navy: #0B1220;
+  --midnight-navy-soft: #111C2E;
+  --soft-white: #F8FAFC;
+  --card: #FFFFFF;
+  --border: #E2E8F0;
+  --secondary-text: #64748B;
+  --royal-blue: #2563EB;
+  --royal-blue-strong: #1D4ED8;
+  --success: #10B981;
+  --background: var(--soft-white);
+  --foreground: var(--midnight-navy);
+  --muted: var(--secondary-text);
+  --ring: rgba(37, 99, 235, 0.2);
+  --shadow-soft: 0 14px 35px rgba(15, 23, 42, 0.08);
+  --shadow-card: 0 12px 28px rgba(15, 23, 42, 0.06);
+  --radius: 1rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --border: #262626;
-    --input: #262626;
-    --ring: #d4d4d4;
-  }
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: all 180ms ease;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  color: var(--foreground);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--royal-blue);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.16);
+  color: var(--midnight-navy);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.22);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
 }

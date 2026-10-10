@@ -1,11 +1,22 @@
 import { prisma } from '../../config/prisma';
 import { Merchant, Balance } from '@payment-gateway/database';
 
+export type UpdateMerchantProfileInput = Partial<
+  Pick<Merchant, 'businessName' | 'businessUrl' | 'webhookUrl' | 'webhookSecret'>
+>;
+
 export class DashboardRepository {
   async getMerchantProfile(merchantId: string): Promise<(Merchant & { balance: Balance | null }) | null> {
     return prisma.merchant.findUnique({
       where: { id: merchantId },
       include: { balance: true },
+    });
+  }
+
+  async updateMerchantProfile(merchantId: string, data: UpdateMerchantProfileInput) {
+    return prisma.merchant.update({
+      where: { id: merchantId },
+      data,
     });
   }
 

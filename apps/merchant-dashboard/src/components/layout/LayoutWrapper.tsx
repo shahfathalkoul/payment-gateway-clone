@@ -9,11 +9,11 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const isCheckout = pathname?.startsWith('/checkout');
 
   if (isCheckout) {
-    return <main className="min-h-screen w-full bg-gray-900">{children}</main>;
+    return <main className="min-h-screen w-full bg-[var(--soft-white)]">{children}</main>;
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-gray-50 text-gray-900">
+    <div className="flex min-h-screen w-full bg-[var(--soft-white)] text-[var(--midnight-navy)]">
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen overflow-y-auto">
         {children}
